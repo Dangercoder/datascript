@@ -1,6 +1,6 @@
 (ns ^:no-doc datascript.impl.entity
   (:refer-clojure :exclude [keys get])
-  (:require [#?(:cljs cljs.core :clj clojure.core) :as c]
+  (:require [#?(:cljs cljs.core :clj clojure.core :cljr clojure.core) :as c]
     [datascript.db :as db]))
 
 (declare entity ->Entity equiv-entity lookup-entity touch hash-entity)
@@ -152,6 +152,33 @@
 
        clojure.lang.IFn
        (invoke [e k]      (lookup-entity e k))
+       (invoke [e k not-found] (lookup-entity e k not-found))]
+
+      :cljr
+      [Object
+       (ToString [e]      (pr-str (assoc @cache :db/id eid)))
+       (GetHashCode [e]   (hash-entity e))
+       (Equals [e o]      (equiv-entity e o))
+
+       clojure.lang.Seqable
+       (seq [e]           (touch e) (seq @cache))
+
+       clojure.lang.Associative
+       (equiv [e o]       (equiv-entity e o))
+       (containsKey [e k] (not= ::nf (lookup-entity e k ::nf)))
+       (entryAt [e k]     (some->> (lookup-entity e k) (clojure.lang.MapEntry. k)))
+
+       (empty [e]         (throw (System.NotSupportedException.)))
+       (assoc [e k v]     (throw (System.NotSupportedException.)))
+       (cons  [e [k v]]   (throw (System.NotSupportedException.)))
+       (count [e]         (touch e) (count @(.-cache e)))
+
+       clojure.lang.ILookup
+       (valAt [e k]       (lookup-entity e k))
+       (valAt [e k not-found] (lookup-entity e k not-found))
+
+       clojure.lang.IFn
+       (invoke [e k]      (lookup-entity e k))
        (invoke [e k not-found] (lookup-entity e k not-found))]))
 
 (defn entity? [x] (instance? Entity x))
@@ -175,7 +202,7 @@
   (db/combine-hashes
     (hash (.-eid e))
     ;; A hash compatible with `identical?`. Consistent with `=`.
-    (#?(:clj System/identityHashCode :cljs goog/getUid) (.-db e))))
+    (#?(:clj System/identityHashCode :cljr System.Runtime.CompilerServices.RuntimeHelpers/GetHashCode :cljs goog/getUid) (.-db e))))
 
 (defn- lookup-entity
   ([this attr] (lookup-entity this attr nil))

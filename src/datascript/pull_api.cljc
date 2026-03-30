@@ -10,24 +10,29 @@
      (:import
        [clojure.lang ISeq]
        [datascript.db Datom DB]
+       [datascript.pull_parser PullAttr PullPattern])
+     :cljr
+     (:import
+       [clojure.lang ISeq]
+       [datascript.db Datom DB]
        [datascript.pull_parser PullAttr PullPattern])))
 
 (declare pull-impl attrs-frame ref-frame ->ReverseAttrsFrame)
 
-(defn- first-seq [#?(:clj ^ISeq xs :cljs ^seq xs)]
+(defn- first-seq [#?(:clj ^ISeq xs :cljr ^ISeq xs :cljs ^seq xs)]
   (if (nil? xs)
     nil
-    #?(:clj (.first xs) :cljs (-first xs))))
+    #?(:clj (.first xs) :cljr (.first xs) :cljs (-first xs))))
 
-(defn- next-seq [#?(:clj ^ISeq xs :cljs ^seq xs)]
+(defn- next-seq [#?(:clj ^ISeq xs :cljr ^ISeq xs :cljs ^seq xs)]
   (if (nil? xs)
     nil
-    #?(:clj (.next xs) :cljs (-next xs))))
+    #?(:clj (.next xs) :cljr (.next xs) :cljs (-next xs))))
 
-(defn- conj-seq [#?(:clj ^ISeq xs :cljs ^seq xs) x]
+(defn- conj-seq [#?(:clj ^ISeq xs :cljr ^ISeq xs :cljs ^seq xs) x]
   (if (nil? xs)
     (list x)
-    #?(:clj (.cons xs x) :cljs (-conj xs x))))
+    #?(:clj (.cons xs x) :cljr (.cons xs x) :cljs (-conj xs x))))
 
 (defn- assoc-some! [m k v]
   (if (nil? v) m (assoc! m k v)))
@@ -164,8 +169,8 @@
         (recur acc (first-seq attrs) (next-seq attrs) datoms)
 
         ;; default
-        (and datom-ahead? (some? (#?(:clj .-default :cljs :default) attr)))
-        (recur (assoc! acc (.-as attr) (#?(:clj .-default :cljs :default) attr)) (first-seq attrs) (next-seq attrs) datoms)
+        (and datom-ahead? (some? (#?(:clj .-default :cljr .-default :cljs :default) attr)))
+        (recur (assoc! acc (.-as attr) (#?(:clj .-default :cljr .-default :cljs :default) attr)) (first-seq attrs) (next-seq attrs) datoms)
 
         ;; xform
         datom-ahead?
@@ -224,8 +229,8 @@
 
         :do (visit context :db.pull/reverse nil name id)
 
-        (and (empty? datoms) (some? (#?(:clj .-default :cljs :default) attr)))
-        (recur (assoc! acc (.-as attr) (#?(:clj .-default :cljs :default) attr)) (first-seq attrs) (next-seq attrs))
+        (and (empty? datoms) (some? (#?(:clj .-default :cljr .-default :cljs :default) attr)))
+        (recur (assoc! acc (.-as attr) (#?(:clj .-default :cljr .-default :cljs :default) attr)) (first-seq attrs) (next-seq attrs))
 
         (empty? datoms)
         (recur acc (first-seq attrs) (next-seq attrs))

@@ -1,0 +1,7 @@
+(in-ns 'datascript.serialize)
+
+(defmacro array [& args]
+  (vec args))
+
+(defmacro dict [& args]
+  `(array-map ~@args))

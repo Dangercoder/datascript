@@ -875,6 +875,10 @@
        (and (satisfies? ISearch x)
          (satisfies? IIndexAccess x)
          (satisfies? IDB x)))
+     :cljr
+     (and (satisfies? ISearch x)
+       (satisfies? IIndexAccess x)
+       (satisfies? IDB x))
      :cljs
      (and (satisfies? ISearch x)
        (satisfies? IIndexAccess x)

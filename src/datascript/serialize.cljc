@@ -13,6 +13,13 @@
   #?(:clj
      (:import
        [datascript.db Datom]
+       [me.tonsky.persistent_sorted_set PersistentSortedSet])
+     :cljr
+     (:import
+       [datascript.db Datom]))
+  #?(:clj
+     (:import
+       [datascript.db Datom]
        [me.tonsky.persistent_sorted_set PersistentSortedSet])))
 
 (def ^:const ^:private marker-kw 0)
@@ -23,6 +30,8 @@
 
 (defn- if-cljs [env then else]
   (if (:ns env) then else))
+
+#?(:cljr (load "serialize_macros"))
 
 #?(:clj
    (defmacro array
@@ -42,14 +51,17 @@
 
 (defn- array-get [d i]
   #?(:clj  (.get ^java.util.List d (int i))
+     :cljr (nth d i)
      :cljs (if (cljs.core/array? d) (arrays/aget d i) (nth d i))))
 
 (defn- dict-get [d k]
   #?(:clj  (.get ^java.util.Map d k)
+     :cljr (get d k)
      :cljs (if (map? d) (d k) (arrays/aget d k))))
 
 (defn- array? [a]
   #?(:clj  (instance? java.util.List a)
+     :cljr (or (vector? a) (seq? a))
      :cljs (or (cljs.core/array? a) (vector? a))))
 
 (defn- amap [f xs]
@@ -149,7 +161,7 @@
                         (cond
                           (== ##Inf v)  (array marker-inf)
                           (== ##-Inf v) (array marker-minus-inf)
-                          #?(:clj (Double/isNaN v) :cljs (js/isNaN v)) (array marker-nan)
+                          #?(:clj (Double/isNaN v) :cljr (Double/IsNaN (double v)) :cljs (js/isNaN v)) (array marker-nan)
                           :else v)
 
                         (boolean? v) v
@@ -184,9 +196,17 @@
       "avet"     avet
       #?@(:clj
           ["branching-factor" (:branching-factor settings)
-           "ref-type"         (name (:ref-type settings))]))))
+           "ref-type"         (name (:ref-type settings))]
+          :cljr
+          ["branching-factor" 512
+           "ref-type"         "soft"]))))
 
 #?(:clj
+   (let [lock (Object.)]
+     (defn serializable
+       ([db] (locking lock (serializable-impl db {})))
+       ([db opts] (locking lock (serializable-impl db opts)))))
+   :cljr
    (let [lock (Object.)]
      (defn serializable
        ([db] (locking lock (serializable-impl db {})))
@@ -230,9 +250,9 @@
                                               {:error :serialize :value v}))
                                   tx (+ tx0 (array-get arr 3))]
                               (db/datom e a v tx))))
-                    #?(:clj arrays/into-array))
-         aevt     (some->> (dict-get from "aevt") (amap #(arrays/aget eavt %)) #?(:clj arrays/into-array))
-         avet     (some->> (dict-get from "avet") (amap #(arrays/aget eavt %)) #?(:clj arrays/into-array))
+                    #?(:clj arrays/into-array :cljr arrays/into-array))
+         aevt     (some->> (dict-get from "aevt") (amap #(arrays/aget eavt %)) #?(:clj arrays/into-array :cljr arrays/into-array))
+         avet     (some->> (dict-get from "avet") (amap #(arrays/aget eavt %)) #?(:clj arrays/into-array :cljr arrays/into-array))
          settings (merge
                     {:branching-factor (dict-get from "branching-factor")
                      :ref-type         (some-> (dict-get from "ref-type") keyword)}

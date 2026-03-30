@@ -3,6 +3,7 @@
   #?(:cljs (:require-macros [datascript.parser :refer [deftrecord]]))
   (:require
     [clojure.set :as set]
+    [datascript.util :as util]
     [datascript.db :as db]
     [datascript.util :as util]))
 
@@ -14,6 +15,8 @@
   (-collect      [_ pred acc])
   (-collect-vars [_ acc])
   (-postwalk     [_ f]))
+
+#?(:cljr (load "parser_macros"))
 
 #?(:clj
    (defmacro deftrecord
