@@ -36,8 +36,14 @@
 
 (defn from-sorted-array
   "Creates a sorted set from a pre-sorted array and comparator."
-  [cmp arr]
-  (apply sorted-set-by cmp (seq arr)))
+  ([cmp arr]
+   (if (nil? arr)
+     (sorted-set-by cmp)
+     (apply sorted-set-by cmp (seq arr))))
+  ([cmp arr len]
+   (from-sorted-array cmp arr))
+  ([cmp arr len settings]
+   (from-sorted-array cmp arr)))
 
 (defn settings [s]
   {:branching-factor 512})
@@ -57,5 +63,13 @@
 
 ;; ── Set operations (aliases for clojure.core) ───────────────────────
 
-(def conj clojure.core/conj)
-(def disj clojure.core/disj)
+(defn conj
+  "Add element to sorted set. Extra comparator arg is accepted but ignored
+   (the set already has its comparator from sorted-set-by)."
+  ([s v] (clojure.core/conj s v))
+  ([s v _cmp] (clojure.core/conj s v)))
+
+(defn disj
+  "Remove element from sorted set. Extra comparator arg is accepted but ignored."
+  ([s v] (clojure.core/disj s v))
+  ([s v _cmp] (clojure.core/disj s v)))

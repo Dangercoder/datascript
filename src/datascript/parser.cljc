@@ -57,6 +57,10 @@
    (cond
      (pred form)                    (conj acc form)
      (satisfies? ITraversable form) (-collect form pred acc)
+     (or (symbol? form)
+         (keyword? form)
+         (string? form)
+         (number? form))            acc
      (db/seqable? form)             (reduce (fn [acc form] (collect pred form acc)) acc form)
      :else                          acc)))
 
