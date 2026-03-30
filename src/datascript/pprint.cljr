@@ -1,0 +1,4 @@
+(ns datascript.pprint
+  "CLR stub for pprint. Pretty-printing support is minimal on CLR for now.")
+
+;; No-op — pretty printing will use default print methods on CLR

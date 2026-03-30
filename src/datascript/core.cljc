@@ -1,10 +1,10 @@
 (ns datascript.core
   (:refer-clojure :exclude [filter])
   (:require
-    [#?(:cljs cljs.reader :clj clojure.edn) :as edn]
+    [#?(:cljs cljs.reader :clj clojure.edn :cljr clojure.edn) :as edn]
     [datascript.conn :as conn]
     [datascript.db :as db #?@(:cljs [:refer [Datom DB FilteredDB]])]
-    #?(:clj [datascript.pprint])
+    #?(:clj [datascript.pprint] :cljr [datascript.pprint])
     [datascript.pull-api :as dp]
     [datascript.serialize :as ds]
     [datascript.storage :as storage]
@@ -16,7 +16,12 @@
      (:import
        [datascript.db Datom DB FilteredDB]
        [datascript.impl.entity Entity]
-       [java.util UUID])))
+       [java.util UUID])
+     :cljr
+     (:import
+       [datascript.db Datom DB FilteredDB]
+       [datascript.impl.entity Entity]
+       [System Guid])))
 
 (def ^:const ^:no-doc tx0 
   db/tx0)

@@ -1,0 +1,81 @@
+(in-ns 'datascript.db)
+
+;; CLR-compatible macros for datascript.db
+;; These are defined in #?(:clj ...) blocks in db.cljc and need CLR equivalents.
+
+(defmacro if-cljs
+  "On CLR, always returns the else branch (we're not CLJS)."
+  [then else]
+  else)
+
+(defn patch-tag [meta cljs-env?]
+  (if cljs-env?
+    meta
+    (condp = (:tag meta)
+      'boolean (assoc meta :tag System.Boolean)
+      'number  meta
+      meta)))
+
+(defmacro defn+
+  "On CLR, same as defn — no CLJS optimization needed."
+  [name & rest]
+  `(defn ~name ~@rest))
+
+(defmacro combine-cmp [& comps]
+  (loop [comps (reverse comps)
+         res   0]
+    (if (not-empty comps)
+      (recur
+        (next comps)
+        `(let [c# ~(first comps)]
+           (if (not= 0 c#)
+             c#
+             ~res)))
+      res)))
+
+(defn -case-tree
+  [qs vs]
+  (if (empty? qs)
+    (first vs)
+    (let [q  (first qs)
+          qs (next qs)
+          n  (count (if qs qs []))
+          vs-1 (take (bit-shift-left 1 n) vs)
+          vs-2 (drop (bit-shift-left 1 n) vs)]
+      `(if ~q
+         ~(-case-tree qs vs-1)
+         ~(-case-tree qs vs-2)))))
+
+(defmacro case-tree [qs vs]
+  (-case-tree qs vs))
+
+(defmacro int-compare [x y]
+  `(long (compare ~x ~y)))
+
+(defmacro defcomp [sym [arg1 arg2] & body]
+  `(defn ~sym [~arg1 ~arg2]
+     ~@body))
+
+(defmacro validate-attr [attr at]
+  `(let [attr# ~attr]
+     (when-not (or
+                 (keyword? attr#)
+                 (string? attr#))
+       (let [at# ~at]
+         (datascript.util/raise "Invalid attribute " attr# " at " at#
+           {:error :transact/syntax, :attribute attr#, :context at#})))))
+
+;; defrecord-updatable — on CLR, just use defrecord directly
+;; The JVM version does complex macroexpansion walking to dedupe interfaces.
+;; On CLR this isn't needed.
+(defn- make-record-updatable-clr [name fields & impls]
+  `(defrecord ~name ~fields ~@impls))
+
+(defmacro defrecord-updatable [name fields & impls]
+  (apply make-record-updatable-clr name fields impls))
+
+(defmacro validate-val [v at]
+  `(when (nil? ~v)
+     (let [at# ~at]
+       (datascript.util/raise "Cannot store nil as a value at " at#
+         {:error :transact/syntax, :value nil, :context at#}))))

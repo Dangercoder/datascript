@@ -1,0 +1,5 @@
+(ns datascript.inline
+  "CLR stub for datascript.inline — provides update without JVM inline optimization."
+  (:refer-clojure :exclude [update]))
+
+(def update clojure.core/update)

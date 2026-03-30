@@ -2,7 +2,10 @@
   (:refer-clojure :exclude [find])
   #?(:clj
      (:import
-       [java.util UUID])))
+       [java.util UUID])
+     :cljr
+     (:import
+       [System Guid DateTime])))
 
 (def ^:dynamic *debug*
   false)
@@ -128,6 +131,7 @@
 (defn squuid
   ([]
    (squuid #?(:clj  (System/currentTimeMillis)
+              :cljr (.Ticks (DateTime/get_UtcNow))
               :cljs (.getTime (js/Date.)))))
   ([msec]
    #?(:clj
@@ -138,6 +142,8 @@
             new-high (bit-or (bit-and high 0x00000000FFFFFFFF)
                        (bit-shift-left time 32))]
         (UUID. new-high low))
+      :cljr
+      (Guid/NewGuid)
       :cljs
       (uuid
         (str
@@ -156,6 +162,9 @@
   #?(:clj (-> (.getMostSignificantBits ^UUID uuid)
             (bit-shift-right 32)
             (* 1000))
+     :cljr (-> (subs (str uuid) 0 8)
+             (Int64/Parse System.Globalization.NumberStyles/HexNumber nil)
+             (* 1000))
      :cljs (-> (subs (str uuid) 0 8)
              (js/parseInt 16)
              (* 1000))))

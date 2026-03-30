@@ -3,16 +3,22 @@
     #?(:cljs [goog.array :as garray])
     [clojure.walk]
     [clojure.data]
-    #?(:clj [datascript.inline :refer [update]])
+    #?(:clj [datascript.inline :refer [update]]
+      :cljr [datascript.inline :refer [update]])
     [datascript.lru :as lru]
     [datascript.util :as util]
     [me.tonsky.persistent-sorted-set :as set]
     [me.tonsky.persistent-sorted-set.arrays :as arrays])
-  #?(:clj (:import clojure.lang.IFn$OOL))
+  #?(:clj (:import clojure.lang.IFn$OOL)
+     :cljr (:import [System ArgumentException NotSupportedException IndexOutOfRangeException]))
   #?(:cljs (:require-macros [datascript.db :refer [case-tree combine-cmp defn+ defcomp defrecord-updatable int-compare validate-attr validate-val]]))
-  (:refer-clojure :exclude [seqable? #?(:clj update)]))
+  (:refer-clojure :exclude [seqable? #?(:clj update :cljr update)]))
 
-#?(:clj (set! *warn-on-reflection* true))
+#?(:clj (set! *warn-on-reflection* true)
+   :cljr (set! *warn-on-reflection* true))
+
+;; Load CLR-specific macro definitions
+#?(:cljr (load "db_macros"))
 
 ;; ----------------------------------------------------------------------------
 
@@ -20,7 +26,8 @@
    (do
      (def Exception js/Error)
      (def IllegalArgumentException js/Error)
-     (def UnsupportedOperationException js/Error)))
+     (def UnsupportedOperationException js/Error))
+)
 
 (def ^:const e0
   0)
@@ -39,7 +46,8 @@
 
 ;; ----------------------------------------------------------------------------
 
-(defn #?@(:clj  [^Boolean seqable?]  
+(defn #?@(:clj  [^Boolean seqable?]
+         :cljr [^Boolean seqable?]  
           :cljs [^boolean seqable?])
   [x]
   (and (not (string? x))
@@ -51,6 +59,7 @@
                (instance? Iterable x)
                (arrays/array? x)
                (instance? java.util.Map x)))))
+
 
 ;; ----------------------------------------------------------------------------
 ;; macros and funcs to support writing defrecords and updating
@@ -78,6 +87,14 @@
        (condp = (:tag meta)
          'boolean (assoc meta :tag java.lang.Boolean)
          'number  (assoc meta :tag clojure.core$long)
+         meta)))
+   :cljr
+   (defn patch-tag [meta cljs-env?]
+     (if cljs-env?
+       meta
+       (condp = (:tag meta)
+         'boolean (assoc meta :tag System.Boolean)
+         'number  (assoc meta :tag |System.Int64|)
          meta))))
 
 #?(:clj
@@ -101,6 +118,7 @@
 
 (defn combine-hashes [x y]
   #?(:clj  (clojure.lang.Util/hashCombine x y)
+     :cljr (clojure.lang.Util/hashCombine x y)
      :cljs (hash-combine x y)))
 
 #?(:clj
@@ -121,7 +139,7 @@
      ;; (deftype* tagname classname [fields] :implements [interfaces] :tag tagname methods*)
      (let [[deftype* tagname classname fields implements interfaces & rest] deftype-form]
        (when (or (not= deftype* 'deftype*) (not= implements :implements))
-         (throw (IllegalArgumentException. "deftype-form mismatch")))
+         (throw (#?(:clj IllegalArgumentException. :cljr ArgumentException. :cljs js/Error.) "deftype-form mismatch")))
        (list* deftype* tagname classname fields implements (vec (distinct interfaces)) rest))))
 
 #?(:clj
@@ -154,21 +172,27 @@
 ;; ----------------------------------------------------------------------------
 
 #?(:clj  (declare hash-datom)
+    :cljr (declare hash-datom)
    :cljs (defn ^number hash-datom [d]))
 
 #?(:clj  (declare equiv-datom)
+    :cljr (declare equiv-datom)
    :cljs (defn ^boolean equiv-datom [d o]))
 
 #?(:clj  (declare seq-datom)
+    :cljr (declare seq-datom)
    :cljs (defn seq-datom [d]))
 
 #?(:clj  (declare nth-datom)
+    :cljr (declare nth-datom)
    :cljs (defn nth-datom ([d i]) ([d i not-found])))
 
 #?(:clj  (declare assoc-datom)
+    :cljr (declare assoc-datom)
    :cljs (defn assoc-datom [d k v]))
 
 #?(:clj  (declare val-at-datom)
+    :cljr (declare val-at-datom)
    :cljs (defn val-at-datom [d k not-found]))
 
 (defprotocol IDatom
@@ -178,6 +202,7 @@
   (datom-set-idx [this value]))
 
 (deftype Datom #?(:clj [^int e a v ^int tx ^:unsynchronized-mutable ^int idx ^:unsynchronized-mutable ^int _hash]
+                  :cljr [^int e a v ^int tx ^:unsynchronized-mutable ^int idx ^:unsynchronized-mutable ^int _hash]
                   :cljs [^number e a v ^number tx ^:mutable ^number idx ^:mutable ^number _hash])
   IDatom
   (datom-tx [d] (if (pos? tx) tx (- tx)))
@@ -230,10 +255,10 @@
 
        clojure.lang.IPersistentCollection
        (equiv [d o] (and (instance? Datom o) (equiv-datom d o)))
-       (empty [d] (throw (UnsupportedOperationException. "empty is not supported on Datom")))
+       (empty [d] (throw (#?(:clj UnsupportedOperationException. :cljr NotSupportedException. :cljs js/Error.) "empty is not supported on Datom")))
        (count [d] 5)
        (cons [d [k v]] (assoc-datom d k v))
-        
+
        clojure.lang.Indexed
        (nth [this i]           (nth-datom this i))
        (nth [this i not-found] (nth-datom this i not-found))
@@ -244,6 +269,40 @@
 
        clojure.lang.Associative
        (entryAt [d k] (some->> (val-at-datom d k nil) (clojure.lang.MapEntry k)))
+       (containsKey [e k] (#{:e :a :v :tx :added} k))
+       (assoc [d k v] (assoc-datom d k v))]
+      :cljr
+      [Object
+       (GetHashCode [d]
+         (if (zero? _hash)
+           (let [h (int (hash-datom d))]
+             (set! _hash h)
+             h)
+           _hash))
+       (ToString [d] (pr-str d))
+
+       clojure.lang.IHashEq
+       (hasheq [d] (.GetHashCode d))
+
+       clojure.lang.Seqable
+       (seq [d] (seq-datom d))
+
+       clojure.lang.IPersistentCollection
+       (equiv [d o] (and (instance? Datom o) (equiv-datom d o)))
+       (empty [d] (throw (NotSupportedException. "empty is not supported on Datom")))
+       (count [d] 5)
+       (cons [d [k v]] (assoc-datom d k v))
+
+       clojure.lang.Indexed
+       (nth [this i]           (nth-datom this i))
+       (nth [this i not-found] (nth-datom this i not-found))
+
+       clojure.lang.ILookup
+       (valAt [d k] (val-at-datom d k nil))
+       (valAt [d k nf] (val-at-datom d k nf))
+
+       clojure.lang.Associative
+       (entryAt [d k] (some->> (val-at-datom d k nil) (clojure.lang.MapEntry. k)))
        (containsKey [e k] (#{:e :a :v :tx :added} k))
        (assoc [d k v] (assoc-datom d k v))]))
 
@@ -302,7 +361,8 @@
      2 (.-v d)
      3 (datom-tx d)
      4 (datom-added d)
-     #?(:clj  (throw (IndexOutOfBoundsException.))
+     #?(:clj  (throw (#?(:clj IndexOutOfBoundsException. :cljr IndexOutOfRangeException. :cljs js/Error.) ""))
+        :cljr (throw (IndexOutOfRangeException.))
         :cljs (throw (js/Error. (str "Datom/-nth: Index out of bounds: " i))))))
   ([^Datom d ^long i not-found]
    (case i
@@ -320,7 +380,7 @@
     :v     (datom (.-e d) (.-a d) v       (datom-tx d) (datom-added d))
     :tx    (datom (.-e d) (.-a d) (.-v d) v            (datom-added d))
     :added (datom (.-e d) (.-a d) (.-v d) (datom-tx d) v)
-    (throw (IllegalArgumentException. (str "invalid key for #datascript/Datom: " k)))))
+    (throw (#?(:clj IllegalArgumentException. :cljr ArgumentException. :cljs js/Error.) (str "invalid key for #datascript/Datom: " k)))))
 
 ;; printing and reading
 ;; #datomic/DB {:schema <map>, :datoms <vector of [e a v tx]>}
@@ -329,6 +389,7 @@
   (apply datom vec))
 
 #?(:clj
+   #?(:clj
    (defmethod print-method Datom [^Datom d, ^java.io.Writer w]
      (.write w (str "#datascript/Datom "))
      (binding [*out* w]
@@ -367,17 +428,22 @@
 
 (defn cmp
   #?(:clj
-     {:inline
-      (fn [x y]
+     {:inline (fn [x y]
         `(let [x# ~x y# ~y]
-           (if (nil? x#) 0 (if (nil? y#) 0 (long (compare x# y#))))))})
+           (if (nil? x#) 0 (if (nil? y#) 0 (long (compare x# y#))))))}
+     :cljr {}
+     :cljs {})
   ^long [x y]
   (if (nil? x) 0 (if (nil? y) 0 (long (compare x y)))))
 
 (defn class-identical?
-  #?(:clj  {:inline (fn [x y] `(identical? (class ~x) (class ~y)))})
+  #?(:clj
+     {:inline (fn [x y] `(identical? (class ~x) (class ~y)))}
+     :cljr {}
+     :cljs {})
   [x y]
   #?(:clj  (identical? (class x) (class y))
+     :cljr (identical? (class x) (class y))
      :cljs (identical? (type x) (type y))))
 
 #?(:clj
@@ -391,6 +457,7 @@
 (defn class-compare
   ^long [x y]
   #?(:clj  (long (compare (class-name x) (class-name y)))
+     :cljr (long (compare (class-name x) (class-name y)))
      :cljs (garray/defaultCompare (type->str (type x)) (type->str (type y)))))
 
 #?(:clj
@@ -403,9 +470,11 @@
   {:inline (fn [x] `(. clojure.lang.Util (hasheq ~x)))}
   ^long [x]
   #?(:clj  (. clojure.lang.Util (hasheq x))
+     :cljr (. clojure.lang.Util (hasheq x))
      :cljs (hash x)))
 
 #?(:clj  (declare value-compare)
+    :cljr (declare value-compare)
    :cljs (defn ^number value-compare [x y]))
 
 (defn- seq-compare [xs ys]
@@ -446,8 +515,10 @@
     (cond
       (= x y) 0
       (and (sequential? x) (sequential? y)) (seq-compare x y)
-      #?@(:clj  [(instance? Number x)       (clojure.lang.Numbers/compare x y)])
+      #?@(:clj  [(instance? Number x)       (clojure.lang.Numbers/compare x y)]
+          :cljr [(number? x)               (compare x y)])
       #?@(:clj  [(instance? Comparable x)   (.compareTo ^Comparable x y)]
+          :cljr [(instance? IComparable x) (.CompareTo ^IComparable x y)]
           :cljs [(satisfies? IComparable x) (-compare x y)])
       (not (class-identical? x y)) (class-compare x y)
       #?@(:cljs [(or (number? x) (string? x) (array? x) (true? x) (false? x)) (garray/defaultCompare x y)])
@@ -459,8 +530,7 @@
 
 (defn value-cmp
   #?(:clj
-     {:inline
-      (fn [x y]
+     {:inline (fn [x y]
         `(let [x# ~x y# ~y]
            (if (nil? x#) 0 (if (nil? y#) 0 (value-compare x# y#)))))})
   ^long [x y]
@@ -482,7 +552,7 @@
             ~@body)
           (def ~sym
             (reify
-              java.util.Comparator
+              #?(:clj java.util.Comparator :cljr System.Collections.IComparer)
               (compare [_# ~a1 ~a2]
                 (let [~arg1 ~arg1 ~arg2 ~arg2]
                   ~@body))
@@ -518,8 +588,7 @@
 
 (defn- cmp-attr-quick
   #?(:clj
-     {:inline
-      (fn [a1 a2]
+     {:inline (fn [a1 a2]
         `(long (.compareTo ~(with-meta a1 {:tag "Comparable"}) ~a2)))})
   ^long [a1 a2]
   ;; either both are keywords or both are strings
@@ -582,15 +651,19 @@
 ;; ----------------------------------------------------------------------------
 
 #?(:clj  (declare hash-db)
+    :cljr (declare hash-db)
    :cljs (defn ^number hash-db [db]))
 
 #?(:clj  (declare hash-fdb)
+    :cljr (declare hash-fdb)
    :cljs (defn ^number hash-fdb [db]))
 
 #?(:clj  (declare equiv-db)
+    :cljr (declare equiv-db)
    :cljs (defn ^boolean equiv-db [db other]))
 
 #?(:clj  (declare restore-db)
+    :cljr (declare restore-db)
    :cljs (defn restore-db [keys]))
 
 #?(:clj  (declare indexing?)
@@ -599,6 +672,7 @@
 #?(:cljs (defn pr-db [db w opts]))
 
 #?(:clj  (declare resolve-datom)
+    :cljr (declare resolve-datom)
    :cljs (defn resolve-datom [db e a v t default-e default-tx]))
 
 #?(:clj  (declare components->pattern)
@@ -719,6 +793,7 @@
           aevt       (.-aevt db)
           avet       (.-avet db)
           pred       #?(:clj  (vpred v)
+                      :cljr (vpred v)
                         :cljs #(= v %))
           multival?  (contains? (-attrs-by db :db.cardinality/many) a)]
       (case-tree [e a (some? v) tx]
@@ -827,18 +902,18 @@
        clojure.lang.IPersistentCollection
        (count [db]         (count (-datoms db :eavt nil nil nil nil)))
        (equiv [db o]       (equiv-db db o))
-       (cons [db [k v]]    (throw (UnsupportedOperationException. "cons is not supported on FilteredDB")))
-       (empty [db]         (throw (UnsupportedOperationException. "empty is not supported on FilteredDB")))
+       (cons [db [k v]]    (throw (#?(:clj UnsupportedOperationException. :cljr NotSupportedException. :cljs js/Error.) "cons is not supported on FilteredDB")))
+       (empty [db]         (throw (#?(:clj UnsupportedOperationException. :cljr NotSupportedException. :cljs js/Error.) "empty is not supported on FilteredDB")))
 
-       clojure.lang.ILookup (valAt [db k]       (throw (UnsupportedOperationException. "valAt/2 is not supported on FilteredDB")))
-       (valAt [db k nf]    (throw (UnsupportedOperationException. "valAt/3 is not supported on FilteredDB")))
+       clojure.lang.ILookup (valAt [db k]       (throw (#?(:clj UnsupportedOperationException. :cljr NotSupportedException. :cljs js/Error.) "valAt/2 is not supported on FilteredDB")))
+       (valAt [db k nf]    (throw (#?(:clj UnsupportedOperationException. :cljr NotSupportedException. :cljs js/Error.) "valAt/3 is not supported on FilteredDB")))
        clojure.lang.IKeywordLookup (getLookupThunk [db k]
-                                     (throw (UnsupportedOperationException. "getLookupThunk is not supported on FilteredDB")))
+                                     (throw (#?(:clj UnsupportedOperationException. :cljr NotSupportedException. :cljs js/Error.) "getLookupThunk is not supported on FilteredDB")))
 
        clojure.lang.Associative
-       (containsKey [e k]  (throw (UnsupportedOperationException. "containsKey is not supported on FilteredDB")))
-       (entryAt [db k]     (throw (UnsupportedOperationException. "entryAt is not supported on FilteredDB")))
-       (assoc [db k v]     (throw (UnsupportedOperationException. "assoc is not supported on FilteredDB")))])
+       (containsKey [e k]  (throw (#?(:clj UnsupportedOperationException. :cljr NotSupportedException. :cljs js/Error.) "containsKey is not supported on FilteredDB")))
+       (entryAt [db k]     (throw (#?(:clj UnsupportedOperationException. :cljr NotSupportedException. :cljs js/Error.) "entryAt is not supported on FilteredDB")))
+       (assoc [db k v]     (throw (#?(:clj UnsupportedOperationException. :cljr NotSupportedException. :cljs js/Error.) "assoc is not supported on FilteredDB")))])
 
   IDB
   (-schema [db]
@@ -1126,6 +1201,7 @@
 ;; ----------------------------------------------------------------------------
 
 #?(:clj  (declare entid-strict)
+    :cljr (declare entid-strict)
    :cljs (defn ^number entid-strict [db eid]))
 
 #?(:clj  (declare ref?)
@@ -1357,12 +1433,14 @@
          :datom datom}))))
 
 (defn- current-tx
-  #?(:clj {:inline (fn [report] `(-> ~report :db-before :max-tx long inc))})
+  #?(:clj
+     {:inline (fn [report] `(-> ~report :db-before :max-tx long inc))})
   ^long [report]
   (-> report :db-before :max-tx long inc))
 
 (defn- next-eid
-  #?(:clj {:inline (fn [db] `(inc (long (:max-eid ~db))))})
+  #?(:clj
+     {:inline (fn [db] `(inc (long (:max-eid ~db))))})
   ^long [db]
   (inc (long (:max-eid db))))
 
@@ -1625,6 +1703,7 @@
               (map (fn [^Datom d] [:db.fn/retractEntity (.-v d)]))) datoms))
 
 #?(:clj  (declare transact-tx-data-impl)
+    :cljr (declare transact-tx-data-impl)
    :cljs (defn transact-tx-data-impl [initial-report initial-es]))
 
 (defn- retry-with-tempid [initial-report report es tempid upserted-eid]

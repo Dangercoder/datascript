@@ -1,5 +1,6 @@
 (ns me.tonsky.persistent-sorted-set.arrays
-  "CLR-compatible array utilities matching the persistent-sorted-set arrays API.")
+  "CLR-compatible array utilities matching the persistent-sorted-set arrays API."
+  (:refer-clojure :exclude [make-array aget aset alength aclone]))
 
 (defn make-array
   "Creates an object array of the given size."

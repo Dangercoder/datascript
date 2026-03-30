@@ -2,20 +2,37 @@
   (:require
     [datascript.db :as db #?@(:cljs [:refer [DB FilteredDB]])]
     [datascript.storage :as storage]
-    [extend-clj.core :as extend]
+    #?(:clj [extend-clj.core :as extend])
     [me.tonsky.persistent-sorted-set :as set])
   #?(:clj
      (:import
+       [datascript.db DB FilteredDB])
+     :cljr
+     (:import
        [datascript.db DB FilteredDB])))
 
-(extend/deftype-atom Conn [atom]
-  (deref-impl [this]
-    (:db @atom))
-  (compare-and-set-impl [this oldv newv]
-    (compare-and-set!
-      atom
-      (assoc @atom :db oldv)
-      (assoc @atom :db newv))))
+#?(:clj
+   (extend/deftype-atom Conn [atom]
+     (deref-impl [this]
+       (:db @atom))
+     (compare-and-set-impl [this oldv newv]
+       (compare-and-set!
+         atom
+         (assoc @atom :db oldv)
+         (assoc @atom :db newv))))
+   :cljr
+   (deftype Conn [^clojure.lang.Atom atom]
+     clojure.lang.IDeref
+     (deref [_] (:db @atom))
+     clojure.lang.IAtom
+     (swap [_ f] (swap! atom (fn [state] (assoc state :db (f (:db state))))))
+     (swap [_ f a] (swap! atom (fn [state] (assoc state :db (f (:db state) a)))))
+     (swap [_ f a b] (swap! atom (fn [state] (assoc state :db (f (:db state) a b)))))
+     (reset [_ v] (swap! atom assoc :db v) v))
+   :cljs
+   (deftype Conn [atom]
+     IDeref
+     (-deref [_] (:db @atom))))
 
 (defn- make-conn [opts]
   (->Conn (atom opts)))
@@ -37,6 +54,7 @@
 (defn conn? [conn]
   (and
     #?(:clj  (instance? clojure.lang.IDeref conn)
+       :cljr (instance? clojure.lang.IDeref conn)
        :cljs (satisfies? cljs.core/IDeref conn))
     (if-some [db @conn]
       (db/db? db)

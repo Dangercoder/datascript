@@ -1,0 +1,45 @@
+(ns datascript.storage
+  "CLR stub for datascript.storage.
+   The JVM version uses file-based storage with WeakReferences.
+   The CLR version will use async SQLite storage (future work).")
+
+;; Stubs for functions referenced by core.cljc
+
+(defn storage [db]
+  nil)
+
+(defn store
+  ([db] nil)
+  ([db storage] nil))
+
+(defn restore
+  ([storage] nil)
+  ([storage opts] nil))
+
+(defn addresses [db]
+  #{})
+
+(defn collect-garbage [storage]
+  nil)
+
+(defn file-storage
+  ([dir] nil)
+  ([dir opts] nil))
+
+(defn maybe-adapt-storage [opts]
+  opts)
+
+(defn storage-adapter [db]
+  nil)
+
+(defn store-impl! [db adapter full?]
+  nil)
+
+(defn store-tail [db tail]
+  nil)
+
+(defn restore-impl [storage opts]
+  nil)
+
+(defn db-with-tail [db tail]
+  db)

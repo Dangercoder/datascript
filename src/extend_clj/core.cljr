@@ -1,0 +1,25 @@
+(ns extend-clj.core
+  "CLR stub for extend-clj. Provides deftype-atom macro.")
+
+(defmacro deftype-atom
+  "Creates a type wrapping an atom with IDeref semantics.
+   The body should contain (deref-impl [this] ...) and
+   (compare-and-set-impl [this oldv newv] ...) forms."
+  [name [atom-field] & body]
+  ;; For CLR, we generate a simple deftype that implements IDeref and IAtom
+  ;; by delegating to the inner atom, with custom deref behavior.
+  (let [this-sym (gensym "this")]
+    `(do
+       (deftype ~name [~atom-field]
+         clojure.lang.IDeref
+         (~'deref [~this-sym]
+           (let [~'this ~this-sym]
+             ~@(some (fn [form]
+                       (when (and (list? form) (= 'deref-impl (first form)))
+                         (nnext form)))
+                     body))))
+       ;; Make swap! work via the atom field
+       (extend-type ~name
+         clojure.lang.IRef
+         (addWatch [conn# k# f#] (.addWatch (.-~atom-field conn#) k# f#) conn#)
+         (removeWatch [conn# k#] (.removeWatch (.-~atom-field conn#) k#) conn#)))))
