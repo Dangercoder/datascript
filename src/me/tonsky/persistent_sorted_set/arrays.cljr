@@ -1,0 +1,32 @@
+(ns me.tonsky.persistent-sorted-set.arrays
+  "CLR-compatible array utilities matching the persistent-sorted-set arrays API.")
+
+(defn make-array
+  "Creates an object array of the given size."
+  [size]
+  (object-array size))
+
+(defn array?
+  "Returns true if x is an array."
+  [x]
+  (and (some? x) (.IsArray (.GetType x))))
+
+(defn aget
+  "Gets element at index from array."
+  [arr idx]
+  (clojure.core/aget ^objects arr idx))
+
+(defn aset
+  "Sets element at index in array."
+  [arr idx val]
+  (clojure.core/aset ^objects arr idx val))
+
+(defn alength
+  "Returns length of array."
+  [arr]
+  (clojure.core/alength ^objects arr))
+
+(defn aclone
+  "Clones an array."
+  [arr]
+  (clojure.core/aclone ^objects arr))

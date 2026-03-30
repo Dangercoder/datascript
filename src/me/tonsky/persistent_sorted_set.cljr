@@ -1,0 +1,42 @@
+(ns me.tonsky.persistent-sorted-set
+  "CLR-compatible replacement for the Java persistent-sorted-set library.
+   Uses Clojure's built-in sorted-set-by. This is a functional shim that provides
+   the same API DataScript uses. Performance optimization is future work.")
+
+;; ── Sorted Set Wrapper ──────────────────────────────────────────────
+;; DataScript uses a thin API surface from PSS:
+;; - sorted-set* with :cmp option
+;; - slice (range query)
+;; - rslice (reverse range query)
+;; - Standard Clojure set ops (conj, disj, count, seq)
+;;
+;; Clojure's sorted-set-by provides all of this natively.
+
+(defn sorted-set*
+  "Creates a new persistent sorted set with the given options.
+   Options: :cmp — comparator function"
+  [opts]
+  (sorted-set-by (:cmp opts)))
+
+(defn sorted-set-by-cmp
+  "Creates a sorted set with a comparator and initial elements."
+  [cmp & keys]
+  (apply sorted-set-by cmp keys))
+
+;; ── Range Queries ───────────────────────────────────────────────────
+
+(defn slice
+  "Returns elements in [from, to] range (inclusive).
+   Uses subseq which works on sorted collections."
+  ([s from to]
+   (subseq s >= from <= to))
+  ([s from]
+   (subseq s >= from)))
+
+(defn rslice
+  "Returns elements in [from, to] range in reverse order.
+   Uses rsubseq which works on sorted collections."
+  ([s from to]
+   (rsubseq s >= to <= from))
+  ([s from]
+   (rsubseq s <= from)))
