@@ -31,3 +31,20 @@
   "Clones an array."
   [arr]
   (clojure.core/aclone ^objects arr))
+
+(defn into-array
+  "Converts a collection to an object array."
+  [coll]
+  (clojure.core/into-array Object coll))
+
+(defn amap
+  "Maps a function over an array, returning a new array."
+  [f arr]
+  (clojure.core/into-array Object (map f arr)))
+
+(defn asort
+  "Sorts an array in-place with a comparator."
+  [arr cmp]
+  (System.Array/Sort arr (reify System.Collections.IComparer
+                           (Compare [_ a b] (cmp a b))))
+  arr)

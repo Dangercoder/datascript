@@ -7,6 +7,8 @@
      (:import
        [System Guid DateTime])))
 
+#?(:cljr (load "util_macros"))
+
 (def ^:dynamic *debug*
   false)
 
@@ -17,6 +19,11 @@
           (println ~@body)))))
 
 #?(:clj
+   (defmacro raise [& fragments]
+     (let [msgs (butlast fragments)
+           data (last fragments)]
+       `(throw (ex-info (str ~@(map (fn [m#] (if (string? m#) m# (list 'pr-str m#))) msgs)) ~data))))
+   :cljr
    (defmacro raise [& fragments]
      (let [msgs (butlast fragments)
            data (last fragments)]

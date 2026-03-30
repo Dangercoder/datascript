@@ -1,7 +1,8 @@
 (ns me.tonsky.persistent-sorted-set
   "CLR-compatible replacement for the Java persistent-sorted-set library.
    Uses Clojure's built-in sorted-set-by. This is a functional shim that provides
-   the same API DataScript uses. Performance optimization is future work.")
+   the same API DataScript uses. Performance optimization is future work."
+  (:refer-clojure :exclude [conj disj]))
 
 ;; ── Sorted Set Wrapper ──────────────────────────────────────────────
 ;; DataScript uses a thin API surface from PSS:
@@ -33,6 +34,19 @@
   ([s from]
    (subseq s >= from)))
 
+(defn from-sorted-array
+  "Creates a sorted set from a pre-sorted array and comparator."
+  [cmp arr]
+  (apply sorted-set-by cmp (seq arr)))
+
+(defn settings [s]
+  {:branching-factor 512})
+
+(defn seek
+  "Returns a seq of elements starting from the given element."
+  [s from]
+  (subseq s >= from))
+
 (defn rslice
   "Returns elements in [from, to] range in reverse order.
    Uses rsubseq which works on sorted collections."
@@ -40,3 +54,8 @@
    (rsubseq s >= to <= from))
   ([s from]
    (rsubseq s <= from)))
+
+;; ── Set operations (aliases for clojure.core) ───────────────────────
+
+(def conj clojure.core/conj)
+(def disj clojure.core/disj)

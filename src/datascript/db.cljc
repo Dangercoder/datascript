@@ -10,7 +10,7 @@
     [me.tonsky.persistent-sorted-set :as set]
     [me.tonsky.persistent-sorted-set.arrays :as arrays])
   #?(:clj (:import clojure.lang.IFn$OOL)
-     :cljr (:import [System ArgumentException NotSupportedException IndexOutOfRangeException]))
+     :cljr (:import [System ArgumentException NotSupportedException IndexOutOfRangeException InvalidCastException IComparable]))
   #?(:cljs (:require-macros [datascript.db :refer [case-tree combine-cmp defn+ defcomp defrecord-updatable int-compare validate-attr validate-val]]))
   (:refer-clojure :exclude [seqable? #?(:clj update :cljr update)]))
 
@@ -47,8 +47,8 @@
 ;; ----------------------------------------------------------------------------
 
 (defn #?@(:clj  [^Boolean seqable?]
-         :cljr [^Boolean seqable?]  
-          :cljs [^boolean seqable?])
+         :cljr [seqable?]  
+          :cljs [seqable?])
   [x]
   (and (not (string? x))
     #?(:cljs (or (cljs.core/seqable? x)
@@ -173,11 +173,11 @@
 
 #?(:clj  (declare hash-datom)
     :cljr (declare hash-datom)
-   :cljs (defn ^number hash-datom [d]))
+   :cljs (defn hash-datom [d]))
 
 #?(:clj  (declare equiv-datom)
     :cljr (declare equiv-datom)
-   :cljs (defn ^boolean equiv-datom [d o]))
+   :cljs (defn equiv-datom [d o]))
 
 #?(:clj  (declare seq-datom)
     :cljr (declare seq-datom)
@@ -203,7 +203,7 @@
 
 (deftype Datom #?(:clj [^int e a v ^int tx ^:unsynchronized-mutable ^int idx ^:unsynchronized-mutable ^int _hash]
                   :cljr [^int e a v ^int tx ^:unsynchronized-mutable ^int idx ^:unsynchronized-mutable ^int _hash]
-                  :cljs [^number e a v ^number tx ^:mutable ^number idx ^:mutable ^number _hash])
+                  :cljs [e a v tx ^:mutable idx ^:mutable _hash])
   IDatom
   (datom-tx [d] (if (pos? tx) tx (- tx)))
   (datom-added [d] (pos? tx))
@@ -308,29 +308,29 @@
 
 #?(:cljs (goog/exportSymbol "datascript.db.Datom" Datom))
 
-(defn ^Datom datom
+(defn datom
   ([e a v] (Datom. e a v tx0 0 0))
   ([e a v tx] (Datom. e a v tx 0 0))
   ([e a v tx added] (Datom. e a v (if added tx (- tx)) 0 0)))
 
 (defn datom? [x] (instance? Datom x))
 
-(defn+ ^:private hash-datom [^Datom d]
+(defn+ ^:private hash-datom [d]
   (-> (hash (.-e d))
     (combine-hashes (hash (.-a d)))
     (combine-hashes (hash (.-v d)))))
 
-(defn+ ^:private equiv-datom [^Datom d ^Datom o]
+(defn+ ^:private equiv-datom [d o]
   (and (== (.-e d) (.-e o))
     (= (.-a d) (.-a o))
     (= (.-v d) (.-v o))))
 
-(defn+ ^:private seq-datom [^Datom d]
+(defn+ ^:private seq-datom [d]
   (list (.-e d) (.-a d) (.-v d) (datom-tx d) (datom-added d)))
 
 ;; keep it fast by duplicating for both keyword and string cases
 ;; instead of using sets or some other matching func
-(defn+ ^:private val-at-datom [^Datom d k not-found]
+(defn+ ^:private val-at-datom [d k not-found]
   (cond
     (keyword? k)
     (case k
@@ -354,17 +354,15 @@
     not-found))
 
 (defn+ ^:private nth-datom
-  ([^Datom d ^long i]
+  ([d i]
    (case i
      0 (.-e d)
      1 (.-a d)
      2 (.-v d)
      3 (datom-tx d)
      4 (datom-added d)
-     #?(:clj  (throw (#?(:clj IndexOutOfBoundsException. :cljr IndexOutOfRangeException. :cljs js/Error.) ""))
-        :cljr (throw (IndexOutOfRangeException.))
-        :cljs (throw (js/Error. (str "Datom/-nth: Index out of bounds: " i))))))
-  ([^Datom d ^long i not-found]
+     (throw (ex-info (str "Datom/-nth: Index out of bounds: " i) {}))))
+  ([d i not-found]
    (case i
      0 (.-e d)
      1 (.-a d)
@@ -373,7 +371,7 @@
      4 (datom-added d)
      not-found)))
 
-(defn+ ^:private ^Datom assoc-datom [^Datom d k v]
+(defn+ ^:private assoc-datom [d k v]
   (case k
     :e     (datom v       (.-a d) (.-v d) (datom-tx d) (datom-added d))
     :a     (datom (.-e d) v       (.-v d) (datom-tx d) (datom-added d))
@@ -385,12 +383,11 @@
 ;; printing and reading
 ;; #datomic/DB {:schema <map>, :datoms <vector of [e a v tx]>}
 
-(defn ^Datom datom-from-reader [vec]
+(defn datom-from-reader [vec]
   (apply datom vec))
 
 #?(:clj
-   #?(:clj
-   (defmethod print-method Datom [^Datom d, ^java.io.Writer w]
+   (defmethod print-method Datom [d, ^java.io.Writer w]
      (.write w (str "#datascript/Datom "))
      (binding [*out* w]
        (pr [(.-e d) (.-a d) (.-v d) (datom-tx d) (datom-added d)]))))
@@ -454,6 +451,10 @@
            (if (nil? x#) x# (.getName (. x# (getClass))))))}
      ^String [^Object x] (if (nil? x) x (.getName (. x (getClass))))))
 
+#?(:cljr
+   (defn class-name [x]
+     (if (nil? x) nil (.Name (.GetType x)))))
+
 (defn class-compare
   ^long [x y]
   #?(:clj  (long (compare (class-name x) (class-name y)))
@@ -475,7 +476,7 @@
 
 #?(:clj  (declare value-compare)
     :cljr (declare value-compare)
-   :cljs (defn ^number value-compare [x y]))
+   :cljs (defn value-compare [x y]))
 
 (defn- seq-compare [xs ys]
   (let [cx (count xs)
@@ -510,7 +511,7 @@
                   (recur (next xs) (next ys))
                   v)))))))))
 
-(defn+ ^number value-compare [x y]
+(defn+ value-compare [x y]
   (try
     (cond
       (= x y) 0
@@ -523,7 +524,7 @@
       (not (class-identical? x y)) (class-compare x y)
       #?@(:cljs [(or (number? x) (string? x) (array? x) (true? x) (false? x)) (garray/defaultCompare x y)])
       :else (int-compare (ihash x) (ihash y)))
-    (catch #?(:clj ClassCastException :cljs js/Error) e
+    (catch #?(:clj ClassCastException :cljr InvalidCastException :cljs js/Error) e
       (if (not (class-identical? x y))
         (class-compare x y)
         (throw e)))))
@@ -563,21 +564,21 @@
               (invokePrim [this# ~a1 ~a2]
                 (.compare this# ~a1 ~a2))))))))
 
-(defcomp cmp-datoms-eavt ^long [^Datom d1, ^Datom d2]
+(defcomp cmp-datoms-eavt ^long [d1, d2]
   (combine-cmp
     (int-compare (.-e d1) (.-e d2))
     (cmp (.-a d1) (.-a d2))
     (value-cmp (.-v d1) (.-v d2))
     (int-compare (datom-tx d1) (datom-tx d2))))
 
-(defcomp cmp-datoms-aevt ^long [^Datom d1, ^Datom d2]
+(defcomp cmp-datoms-aevt ^long [d1, d2]
   (combine-cmp
     (cmp (.-a d1) (.-a d2))
     (int-compare (.-e d1) (.-e d2))
     (value-cmp (.-v d1) (.-v d2))
     (int-compare (datom-tx d1) (datom-tx d2))))
 
-(defcomp cmp-datoms-avet ^long [^Datom d1, ^Datom d2]
+(defcomp cmp-datoms-avet ^long [d1, d2]
   (combine-cmp
     (cmp (.-a d1) (.-a d2))
     (value-cmp (.-v d1) (.-v d2))
@@ -599,27 +600,27 @@
      :clj
      (.compareTo ^Comparable a1 a2)))
 
-(defcomp cmp-datoms-eav-quick ^long [^Datom d1, ^Datom d2]
+(defcomp cmp-datoms-eav-quick ^long [d1, d2]
   (combine-cmp
     (int-compare (.-e d1) (.-e d2))
     (cmp-attr-quick (.-a d1) (.-a d2))
     (value-compare (.-v d1) (.-v d2))))
 
-(defcomp cmp-datoms-eavt-quick ^long [^Datom d1, ^Datom d2]
+(defcomp cmp-datoms-eavt-quick ^long [d1, d2]
   (combine-cmp
     (int-compare (.-e d1) (.-e d2))
     (cmp-attr-quick (.-a d1) (.-a d2))
     (value-compare (.-v d1) (.-v d2))
     (int-compare (datom-tx d1) (datom-tx d2))))
 
-(defcomp cmp-datoms-aevt-quick ^long [^Datom d1, ^Datom d2]
+(defcomp cmp-datoms-aevt-quick ^long [d1, d2]
   (combine-cmp
     (cmp-attr-quick (.-a d1) (.-a d2))
     (int-compare (.-e d1) (.-e d2))
     (value-compare (.-v d1) (.-v d2))
     (int-compare (datom-tx d1) (datom-tx d2))))
 
-(defcomp cmp-datoms-avet-quick ^long [^Datom d1, ^Datom d2]
+(defcomp cmp-datoms-avet-quick ^long [d1, d2]
   (combine-cmp
     (cmp-attr-quick (.-a d1) (.-a d2))
     (value-compare (.-v d1) (.-v d2))
@@ -640,7 +641,7 @@
             first-b (first b)
             diff (try
                    (cmp first-a first-b)
-                   (catch #?(:clj ClassCastException :cljs js/Error) _
+                   (catch #?(:clj ClassCastException :cljr InvalidCastException :cljs js/Error) _
                      :incomparable))]
         (cond
           (= diff :incomparable) (recur (conj only-a first-a) (conj only-b first-b) both                (next a) (next b))
@@ -652,22 +653,23 @@
 
 #?(:clj  (declare hash-db)
     :cljr (declare hash-db)
-   :cljs (defn ^number hash-db [db]))
+   :cljs (defn hash-db [db]))
 
 #?(:clj  (declare hash-fdb)
     :cljr (declare hash-fdb)
-   :cljs (defn ^number hash-fdb [db]))
+   :cljs (defn hash-fdb [db]))
 
 #?(:clj  (declare equiv-db)
     :cljr (declare equiv-db)
-   :cljs (defn ^boolean equiv-db [db other]))
+   :cljs (defn equiv-db [db other]))
 
 #?(:clj  (declare restore-db)
     :cljr (declare restore-db)
    :cljs (defn restore-db [keys]))
 
 #?(:clj  (declare indexing?)
-   :cljs (defn ^boolean indexing? [db attr]))
+    :cljr (declare indexing?)
+   :cljs (defn indexing? [db attr]))
 
 #?(:cljs (defn pr-db [db w opts]))
 
@@ -676,6 +678,7 @@
    :cljs (defn resolve-datom [db e a v t default-e default-tx]))
 
 #?(:clj  (declare components->pattern)
+   :cljr (declare components->pattern)
    :cljs (defn components->pattern [db index c0 c1 c2 c3 default-e default-tx]))
 
 ;;;;;;;;;; Fast validation
@@ -702,7 +705,7 @@
 (defprotocol ISearch
   (-search [data pattern]))
 
-(defn- ^Datom fsearch [data pattern]
+(defn- fsearch [data pattern]
   (first (-search data pattern)))
 
 (defprotocol IIndexAccess
@@ -793,40 +796,40 @@
           aevt       (.-aevt db)
           avet       (.-avet db)
           pred       #?(:clj  (vpred v)
-                      :cljr (vpred v)
+                        :cljr #(= v %)
                         :cljs #(= v %))
           multival?  (contains? (-attrs-by db :db.cardinality/many) a)]
       (case-tree [e a (some? v) tx]
         [(set/slice eavt (datom e a v tx) (datom e a v tx))                   ;; e a v tx
          (set/slice eavt (datom e a v tx0) (datom e a v txmax))               ;; e a v _
          (->> (set/slice eavt (datom e a nil tx0) (datom e a nil txmax))      ;; e a _ tx
-           (->Eduction (filter (fn [^Datom d] (= tx (datom-tx d))))))
+           (->Eduction (filter (fn [d] (= tx (datom-tx d))))))
          (set/slice eavt (datom e a nil tx0) (datom e a nil txmax))           ;; e a _ _
          (->> (set/slice eavt (datom e nil nil tx0) (datom e nil nil txmax))  ;; e _ v tx
-           (->Eduction (filter (fn [^Datom d] (and (pred (.-v d))
+           (->Eduction (filter (fn [d] (and (pred (.-v d))
                                                 (= tx (datom-tx d)))))))
          (->> (set/slice eavt (datom e nil nil tx0) (datom e nil nil txmax))  ;; e _ v _
-           (->Eduction (filter (fn [^Datom d] (pred (.-v d))))))
+           (->Eduction (filter (fn [d] (pred (.-v d))))))
          (->> (set/slice eavt (datom e nil nil tx0) (datom e nil nil txmax))  ;; e _ _ tx
-           (->Eduction (filter (fn [^Datom d] (= tx (datom-tx d))))))
+           (->Eduction (filter (fn [d] (= tx (datom-tx d))))))
          (set/slice eavt (datom e nil nil tx0) (datom e nil nil txmax))       ;; e _ _ _
          (if (indexing? db a)                                                 ;; _ a v tx
            (->> (set/slice avet (datom e0 a v tx0) (datom emax a v txmax))      
-             (->Eduction (filter (fn [^Datom d] (= tx (datom-tx d))))))
+             (->Eduction (filter (fn [d] (= tx (datom-tx d))))))
            (->> (set/slice aevt (datom e0 a nil tx0) (datom emax a nil txmax))
-             (->Eduction (filter (fn [^Datom d] (and (pred (.-v d))
+             (->Eduction (filter (fn [d] (and (pred (.-v d))
                                                   (= tx (datom-tx d))))))))
          (if (indexing? db a)                                                 ;; _ a v _
            (set/slice avet (datom e0 a v tx0) (datom emax a v txmax))
            (->> (set/slice aevt (datom e0 a nil tx0) (datom emax a nil txmax))
-             (->Eduction (filter (fn [^Datom d] (pred (.-v d)))))))
+             (->Eduction (filter (fn [d] (pred (.-v d)))))))
          (->> (set/slice aevt (datom e0 a nil tx0) (datom emax a nil txmax))  ;; _ a _ tx
-           (->Eduction (filter (fn [^Datom d] (= tx (datom-tx d))))))
+           (->Eduction (filter (fn [d] (= tx (datom-tx d))))))
          (set/slice aevt (datom e0 a nil tx0) (datom emax a nil txmax))       ;; _ a _ _
-         (filter (fn [^Datom d] (and (pred (.-v d))
+         (filter (fn [d] (and (pred (.-v d))
                                   (= tx (datom-tx d)))) eavt)                 ;; _ _ v tx
-         (filter (fn [^Datom d] (pred (.-v d))) eavt)                         ;; _ _ v 
-         (filter (fn [^Datom d] (= tx (datom-tx d))) eavt)                    ;; _ _ _ tx
+         (filter (fn [d] (pred (.-v d))) eavt)                         ;; _ _ v 
+         (filter (fn [d] (= tx (datom-tx d))) eavt)                    ;; _ _ _ tx
          eavt])))                                                             ;; _ _ _ _
 
   IIndexAccess
@@ -1099,12 +1102,12 @@
         eavt        (set/from-sorted-array cmp-datoms-eavt arr (arrays/alength arr) opts)
         _           (arrays/asort arr cmp-datoms-aevt-quick)
         aevt        (set/from-sorted-array cmp-datoms-aevt arr (arrays/alength arr) opts)
-        avet-datoms (filter (fn [^Datom d] (contains? indexed (.-a d))) datoms)
+        avet-datoms (filter (fn [d] (contains? indexed (.-a d))) datoms)
         avet-arr    (to-array avet-datoms)
         _           (arrays/asort avet-arr cmp-datoms-avet-quick)
         avet        (set/from-sorted-array cmp-datoms-avet avet-arr (arrays/alength avet-arr) opts)
         max-eid     (init-max-eid rschema eavt avet)
-        max-tx      (transduce (map (fn [^Datom d] (datom-tx d))) max tx0 eavt)]
+        max-tx      (transduce (map (fn [d] (datom-tx d))) max tx0 eavt)]
     (map->DB
       {:schema        schema
        :rschema       rschema
@@ -1148,14 +1151,14 @@
       (= (first xs) (first ys)) (recur (next xs) (next ys))
       :else false)))
 
-(defn+ ^:private ^number hash-db [^DB db]
+(defn+ ^:private hash-db [^DB db]
   (let [h @(.-hash db)]
     (if (zero? h)
       (reset! (.-hash db) (combine-hashes (hash (.-schema db))
                             (hash (.-eavt db))))
       h)))
 
-(defn+ ^:private ^number hash-fdb [^FilteredDB db]
+(defn+ ^:private hash-fdb [^FilteredDB db]
   (let [h @(.-hash db)
         datoms (or (-datoms db :eavt nil nil nil nil) #{})]
     (if (zero? h)
@@ -1164,7 +1167,7 @@
                               (hash-unordered-coll datoms))))
       h)))
 
-(defn+ ^:private ^boolean equiv-db [db other]
+(defn+ ^:private equiv-db [db other]
   (and (or (instance? DB other) (instance? FilteredDB other))
     (= (-schema db) (-schema other))
     (equiv-db-index (-datoms db :eavt nil nil nil nil) (-datoms other :eavt nil nil nil nil))))
@@ -1189,7 +1192,7 @@
        (binding [*out* w]
          (pr (-schema db))
          (.write w ", :datoms [")
-         (apply pr (map (fn [^Datom d] [(.-e d) (.-a d) (.-v d) (datom-tx d)]) (-datoms db :eavt nil nil nil nil))))
+         (apply pr (map (fn [d] [(.-e d) (.-a d) (.-v d) (datom-tx d)]) (-datoms db :eavt nil nil nil nil))))
        (.write w "]}"))
 
      (defmethod print-method DB [db w] (pr-db db w))
@@ -1202,10 +1205,11 @@
 
 #?(:clj  (declare entid-strict)
     :cljr (declare entid-strict)
-   :cljs (defn ^number entid-strict [db eid]))
+   :cljs (defn entid-strict [db eid]))
 
 #?(:clj  (declare ref?)
-   :cljs (defn ^boolean ref? [db attr]))
+    :cljr (declare ref?)
+   :cljs (defn ref? [db attr]))
 
 (defn+ resolve-datom [db e a v t default-e default-tx]
   (when (some? a)
@@ -1227,7 +1231,7 @@
 (defn find-datom [db index c0 c1 c2 c3]
   (validate-indexed db index c0 c1 c2 c3)
   (let [set     (get db index)
-        cmp     #?(:clj (.comparator ^clojure.lang.Sorted set) :cljs (.-comparator set))
+        cmp     #?(:clj (.comparator ^clojure.lang.Sorted set) :cljr (.comparator ^clojure.lang.Sorted set) :cljs (.-comparator set))
         from    (components->pattern db index c0 c1 c2 c3 e0 tx0)
         to      (components->pattern db index c0 c1 c2 c3 emax txmax)
         datom   (some-> set seq (set/seek from) first)]
@@ -1238,35 +1242,35 @@
 
 (defrecord TxReport [db-before db-after tx-data tempids tx-meta])
 
-(defn+ ^boolean is-attr? [db attr property]
+(defn+ is-attr? [db attr property]
   (contains? (-attrs-by db property) attr))
 
-(defn+ ^boolean multival? [db attr]
+(defn+ multival? [db attr]
   (is-attr? db attr :db.cardinality/many))
 
-(defn+ ^boolean multi-value? [db attr value]
+(defn+ multi-value? [db attr value]
   (and
     (is-attr? db attr :db.cardinality/many)
     (or
       (arrays/array? value)
       (and (coll? value) (not (map? value))))))
 
-(defn+ ^boolean ref? [db attr]
+(defn+ ref? [db attr]
   (is-attr? db attr :db.type/ref))
 
-(defn+ ^boolean component? [db attr]
+(defn+ component? [db attr]
   (is-attr? db attr :db/isComponent))
 
-(defn+ ^boolean indexing? [db attr]
+(defn+ indexing? [db attr]
   (is-attr? db attr :db/index))
 
-(defn+ ^boolean tuple? [db attr]
+(defn+ tuple? [db attr]
   (is-attr? db attr :db.type/tuple))
 
-(defn+ ^boolean tuple-source? [db attr]
+(defn+ tuple-source? [db attr]
   (is-attr? db attr :db/attrTuples))
 
-(defn+ ^boolean reverse-ref? [attr]
+(defn+ reverse-ref? [attr]
   (cond
     (keyword? attr)
     (= \_ (nth (name attr) 0))
@@ -1303,7 +1307,7 @@
         v))
     (-> db -schema (get a) :db/tupleAttrs) vs))
 
-(defn+ ^number entid [db eid]
+(defn+ entid [db eid]
   {:pre [(db? db)]}
   (cond
     (and (number? eid) (pos? eid))
@@ -1341,17 +1345,17 @@
     (util/raise "Expected number or lookup ref for entity id, got " eid
       {:error :entity-id/syntax, :entity-id eid})))
 
-(defn+ ^boolean numeric-eid-exists? [db eid]
+(defn+ numeric-eid-exists? [db eid]
   (= eid (-> (-seek-datoms db :eavt eid nil nil nil) first :e)))
 
-(defn+ ^number entid-strict [db eid]
+(defn+ entid-strict [db eid]
   (or
     (entid db eid)
     (util/raise "Nothing found for entity id " eid
       {:error :entity-id/missing
        :entity-id eid})))
 
-(defn+ ^number entid-some [db eid]
+(defn+ entid-some [db eid]
   (when (some? eid)
     (entid-strict db eid)))
 
@@ -1379,7 +1383,7 @@
 (defn auto-tempid []
   (AutoTempid. (swap! *last-auto-tempid inc)))
 
-(defn+ ^boolean auto-tempid? [x]
+(defn+ auto-tempid? [x]
   (instance? AutoTempid x))
 
 (defn assoc-auto-tempids [db tx-data]
@@ -1423,7 +1427,7 @@
       :else
       entity)))
 
-(defn validate-datom [db ^Datom datom]
+(defn validate-datom [db datom]
   (when (and (datom-added datom)
           (is-attr? db (.-a datom) :db/unique))
     (when-some [found (not-empty (-datoms db :avet (.-a datom) (.-v datom) nil nil))]
@@ -1448,12 +1452,20 @@
    (defn- ^Boolean tx-id?
      [e]
      (or (identical? :db/current-tx e)
-       (.equals ":db/current-tx" e) ;; for datascript.js interop
+       (.equals ":db/current-tx" e)
        (.equals "datomic.tx" e)
        (.equals "datascript.tx" e)))
 
+   :cljr
+   (defn- tx-id?
+     [e]
+     (or (= e :db/current-tx)
+       (= e ":db/current-tx")
+       (= e "datomic.tx")
+       (= e "datascript.tx")))
+
    :cljs
-   (defn- ^boolean tx-id?
+   (defn- tx-id?
      [e]
      (or (= e :db/current-tx)
        (= e ":db/current-tx") ;; for datascript.js interop
@@ -1461,7 +1473,8 @@
        (= e "datascript.tx"))))
 
 (defn- #?@(:clj  [^Boolean tempid?]
-           :cljs [^boolean tempid?])
+           :cljr [tempid?]
+           :cljs [tempid?])
   [x]
   (or
     (and (number? x) (neg? x))
@@ -1501,7 +1514,7 @@
 ;; In context of `with-datom` we can use faster comparators which
 ;; do not check for nil (~10-15% performance gain in `transact`)
 
-(defn with-datom [db ^Datom datom]
+(defn with-datom [db datom]
   (validate-datom db datom)
   (let [indexing? (indexing? db (.-a datom))]
     (if (datom-added datom)
@@ -1678,7 +1691,7 @@
         v         (if (ref? db a) (entid-strict db v) v)
         new-datom (datom e a v tx)
         multival? (multival? db a)
-        old-datom ^Datom (if multival?
+        old-datom (if multival?
                            (fsearch db [e a v])
                            (fsearch db [e a]))]
     (cond
@@ -1693,14 +1706,14 @@
         (transact-report (datom e a (.-v old-datom) tx false))
         (transact-report new-datom)))))
 
-(defn- transact-retract-datom [report ^Datom d]
+(defn- transact-retract-datom [report d]
   (let [tx (current-tx report)]
     (transact-report report (datom (.-e d) (.-a d) (.-v d) tx false))))
 
 (defn- retract-components [db datoms]
   (into #{} (comp
-              (filter (fn [^Datom d] (component? db (.-a d))))
-              (map (fn [^Datom d] [:db.fn/retractEntity (.-v d)]))) datoms))
+              (filter (fn [d] (component? db (.-a d))))
+              (map (fn [d] [:db.fn/retractEntity (.-v d)]))) datoms))
 
 #?(:clj  (declare transact-tx-data-impl)
     :cljr (declare transact-tx-data-impl)
@@ -1883,7 +1896,7 @@
                   _      (validate-val nv entity)
                   datoms (vec (-search db [e a]))]
               (if (multival? db a)
-                (if (some (fn [^Datom d] (= (.-v d) ov)) datoms)
+                (if (some (fn [d] (= (.-v d) ov)) datoms)
                   (recur (transact-add report [:db/add e a nv]) entities)
                   (util/raise ":db.fn/cas failed on datom [" e " " a " " (map :v datoms) "], expected " ov
                     {:error :transact/cas, :old datoms, :expected ov, :new nv}))
