@@ -13,9 +13,11 @@
   (and (some? x) (.IsArray (.GetType x))))
 
 (defn aget
-  "Gets element at index from array."
+  "Gets element at index from array or lookup."
   [arr idx]
-  (clojure.core/aget ^objects arr idx))
+  (if (and (some? arr) (.IsArray (.GetType arr)))
+    (clojure.core/aget ^objects arr idx)
+    (get arr idx)))
 
 (defn aset
   "Sets element at index in array."
@@ -28,9 +30,11 @@
   (clojure.core/alength ^objects arr))
 
 (defn aclone
-  "Clones an array."
+  "Clones an array or converts a seq/lookup to array."
   [arr]
-  (clojure.core/aclone ^objects arr))
+  (if (and (some? arr) (.IsArray (.GetType arr)))
+    (clojure.core/aclone ^objects arr)
+    (clojure.core/into-array Object (map #(get arr %) (range (count arr))))))
 
 (defn into-array
   "Converts a collection to an object array."

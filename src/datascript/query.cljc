@@ -292,8 +292,8 @@
         (let [idx (int idx)]
           (fn contained-int-getter-fn [tuple]
             (let [eid #?(:cljs (da/aget tuple idx)
-               :cljr (nth tuple idx)
-                         :cljr (nth tuple idx)
+               :cljr (get tuple idx)
+                         :cljr (get tuple idx)
                          :clj (if (.isArray (.getClass ^Object tuple))
                                 (aget ^objects tuple idx)
                                 (nth tuple idx)))]
@@ -305,7 +305,7 @@
         ;; If the index is not an int?, the target can never be an array
         (fn contained-getter-fn [tuple]
           (let [eid #?(:cljs (da/aget tuple idx)
-             :cljr (nth tuple idx)
+             :cljr (get tuple idx)
                        :clj (.valAt ^ILookup tuple idx))]
             (cond
               (number? eid)     eid ;; quick path to avoid fn call
@@ -316,14 +316,14 @@
         (let [idx (int idx)]
           (fn int-getter [tuple]
             #?(:cljs (da/aget tuple idx)
-               :cljr (nth tuple idx)
+               :cljr (get tuple idx)
                :clj (if (.isArray (.getClass ^Object tuple))
                       (aget ^objects tuple idx)
                       (nth tuple idx)))))
         ;; If the index is not an int?, the target can never be an array
         (fn getter [tuple]
           #?(:cljs (da/aget tuple idx)
-             :cljr (nth tuple idx)
+             :cljr (get tuple idx)
              :clj (.valAt ^ILookup tuple idx)))))))
 
 (defn tuple-key-fn
