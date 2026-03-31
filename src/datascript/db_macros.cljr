@@ -52,27 +52,12 @@
 (defmacro int-compare [x y]
   `(long (compare ~x ~y)))
 
-;; CLR can't do dynamic field access on deftype without type hints.
-;; Provide accessor functions for Datom fields.
-(defn datom-e [d] (:e d))
-(defn datom-a [d] (:a d))
-(defn datom-v [d] (:v d))
-
 (defmacro defcomp [sym [arg1 arg2] & body]
-  ;; Replace (.-e x) (.-a x) (.-v x) with keyword access for CLR compatibility
-  (let [body' (clojure.walk/postwalk
-                (fn [form]
-                  (if (and (list? form) (= 2 (count form)))
-                    (let [op (first form)]
-                      (cond
-                        (= op '.-e) (list :e (second form))
-                        (= op '.-a) (list :a (second form))
-                        (= op '.-v) (list :v (second form))
-                        :else form))
-                    form))
-                body)]
-    `(defn ~sym [~arg1 ~arg2]
-       ~@body')))
+  ;; Type-hint both args as Datom so (.-e d), (.-a d), (.-v d) compile
+  ;; to direct field access instead of going through ILookup protocol dispatch.
+  `(defn ~sym [~(with-meta arg1 {:tag 'datascript.db.Datom})
+               ~(with-meta arg2 {:tag 'datascript.db.Datom})]
+     ~@body))
 
 (defmacro validate-attr [attr at]
   `(let [attr# ~attr]

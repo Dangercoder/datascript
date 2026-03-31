@@ -10,14 +10,29 @@
 (defn array?
   "Returns true if x is an array."
   [x]
-  (and (some? x) (.IsArray (.GetType x))))
+  (instance? System.Array x))
 
 (defn aget
   "Gets element at index from array or lookup."
   [arr idx]
-  (if (and (some? arr) (.IsArray (.GetType arr)))
+  (if (instance? System.Array arr)
     (clojure.core/aget ^objects arr idx)
     (get arr idx)))
+
+(defn aaget
+  "Gets element at index from a known object array. No type check.
+   Use when the caller already knows arr is an object array."
+  ^Object [^objects arr ^int idx]
+  (clojure.core/aget arr idx))
+
+(defn tuple-get
+  "Gets element from a tuple by int index. Works on both arrays and
+   Indexed types (e.g. Datom). Prefer over aget in hot loops when
+   the index is known to be an int."
+  [tuple ^int idx]
+  (if (instance? System.Array tuple)
+    (clojure.core/aget ^objects tuple idx)
+    (nth tuple idx)))
 
 (defn aset
   "Sets element at index in array."
@@ -32,7 +47,7 @@
 (defn aclone
   "Clones an array or converts a seq/lookup to array."
   [arr]
-  (if (and (some? arr) (.IsArray (.GetType arr)))
+  (if (instance? System.Array arr)
     (clojure.core/aclone ^objects arr)
     (clojure.core/into-array Object (map #(get arr %) (range (count arr))))))
 

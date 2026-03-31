@@ -127,8 +127,12 @@
      (let [l1  (alength idxs1)
            l2  (alength idxs2)
            res (da/make-array (+ l1 l2))]
-       (dotimes [i l1] (aset res i (da/aget t1 (aget idxs1 i))))
-       (dotimes [i l2] (aset res (+ l1 i) (da/aget t2 (aget idxs2 i))))
+       (if (instance? System.Array t1)
+         (dotimes [i l1] (aset res i (aget ^objects t1 (aget idxs1 i))))
+         (dotimes [i l1] (aset res i (get t1 (aget idxs1 i)))))
+       (if (instance? System.Array t2)
+         (dotimes [i l2] (aset res (+ l1 i) (aget ^objects t2 (aget idxs2 i))))
+         (dotimes [i l2] (aset res (+ l1 i) (get t2 (aget idxs2 i)))))
        res))
    :cljs
    (defn join-tuples [t1 idxs1
@@ -149,9 +153,15 @@
         tuples' (persistent!
                   (reduce
                     (fn [acc tuple-b]
-                      (let [tuple' (da/make-array tlen)]
+                      (let [tuple' (da/make-array tlen)
+                            arr?   #?(:cljr (instance? System.Array tuple-b) :default false)]
                         (doseq [[idx-b idx-a] idxb->idxa]
-                          (aset tuple' idx-a (#?(:cljs da/aget :clj get :cljr get) tuple-b idx-b)))
+                          (aset tuple' idx-a
+                            #?(:cljs (da/aget tuple-b idx-b)
+                               :clj  (get tuple-b idx-b)
+                               :cljr (if arr?
+                                       (aget ^objects tuple-b idx-b)
+                                       (get tuple-b idx-b)))))
                         (conj! acc tuple')))
                     (transient (vec tuples-a))
                     tuples-b))]
@@ -292,7 +302,7 @@
         (let [idx (int idx)]
           (fn contained-int-getter-fn [tuple]
             (let [eid #?(:cljs (da/aget tuple idx)
-                         :cljr (get tuple idx)
+                         :cljr (da/tuple-get tuple idx)
                          :clj (if (.isArray (.getClass ^Object tuple))
                                 (aget ^objects tuple idx)
                                 (nth tuple idx)))]
@@ -304,7 +314,7 @@
         ;; If the index is not an int?, the target can never be an array
         (fn contained-getter-fn [tuple]
           (let [eid #?(:cljs (da/aget tuple idx)
-             :cljr (get tuple idx)
+                       :cljr (get tuple idx)
                        :clj (.valAt ^ILookup tuple idx))]
             (cond
               (number? eid)     eid ;; quick path to avoid fn call
@@ -315,7 +325,7 @@
         (let [idx (int idx)]
           (fn int-getter [tuple]
             #?(:cljs (da/aget tuple idx)
-               :cljr (get tuple idx)
+               :cljr (da/tuple-get tuple idx)
                :clj (if (.isArray (.getClass ^Object tuple))
                       (aget ^objects tuple idx)
                       (nth tuple idx)))))
@@ -529,14 +539,18 @@
         (let [args (da/aclone static-args)]
           (dotimes [i len]
             (when-some [tuple-idx (aget tuples-args i)]
-              (let [v (#?(:cljs da/aget :clj get :cljr get) tuple tuple-idx)]
+              (let [v (#?(:cljs (da/aget tuple tuple-idx)
+                          :clj  (get tuple tuple-idx)
+                          :cljr (da/aget tuple tuple-idx))]
                 (da/aset args i v))))
           (apply f args)))
       (fn [tuple]
         ;; TODO raise if not all args are bound
         (dotimes [i len]
           (when-some [tuple-idx (aget tuples-args i)]
-            (let [v (#?(:cljs da/aget :clj get :cljr get) tuple tuple-idx)]
+            (let [v (#?(:cljs (da/aget tuple tuple-idx)
+                        :clj  (get tuple tuple-idx)
+                        :cljr (da/aget tuple tuple-idx))]
               (da/aset static-args i v))))
         (apply f static-args)))))
 
@@ -896,9 +910,13 @@
                          (when-some [idx (aget ^objects copy-map i)]
                            (aset res i (get t2 idx)))))
                      :cljr
-                     (dotimes [i len]
-                       (when-some [idx (aget ^objects copy-map i)]
-                         (aset res i (get t2 idx))))
+                     (if (instance? System.Array t2)
+                       (dotimes [i len]
+                         (when-some [idx (aget ^objects copy-map i)]
+                           (aset res i (aget ^objects t2 idx))))
+                       (dotimes [i len]
+                         (when-some [idx (aget ^objects copy-map i)]
+                           (aset res i (get t2 idx)))))
                      :cljs
                      (dotimes [i len]
                        (when-some [idx (aget ^objects copy-map i)]
