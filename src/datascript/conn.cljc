@@ -112,7 +112,7 @@
                 datoms :tx-data} @*report]
            (when-not (empty? datoms)
              (let [settings (set/settings (:eavt db))
-                   *atom    (:atom conn)
+                   *atom    (.-atom conn)
                    tx-tail' (:tx-tail (swap! *atom update :tx-tail conj datoms))]
                (if (> (transduce (map count) + 0 tx-tail') (:branching-factor settings))
                  ;; overflow tail
@@ -132,7 +132,7 @@
    {:pre [(conn? conn)]}
    (locking conn
      (let [report (-transact! conn tx-data tx-meta)]
-       (doseq [[_ callback] (:listeners @(:atom conn))]
+       (doseq [[_ callback] (:listeners @(.-atom conn))]
          (callback report))
        report))))
 
@@ -154,12 +154,12 @@
      (if (storage/storage db-before)
        (do
          (storage/store db)
-         (swap! (:atom conn) assoc
+         (swap! (.-atom conn) assoc
            :db             db
            :tx-tail        []
            :db-last-stored db))
        (reset! conn db))
-     (doseq [[_ callback] (:listeners @(:atom conn))]
+     (doseq [[_ callback] (:listeners @(.-atom conn))]
        (callback report))
      db)))
 
@@ -169,7 +169,7 @@
     #?(:clj
        (when-some [storage (storage/storage @conn)]
          (storage/store-impl! db (storage/storage-adapter db) true)
-         (swap! (:atom conn) assoc
+         (swap! (.-atom conn) assoc
            :tx-tail []
            :db-last-stored db)))
     db))
@@ -179,9 +179,9 @@
    (listen! conn (rand) callback))
   ([conn key callback]
    {:pre [(conn? conn)]}
-   (swap! (:atom conn) update :listeners assoc key callback)
+   (swap! (.-atom conn) update :listeners assoc key callback)
    key))
 
 (defn unlisten! [conn key]
   {:pre [(conn? conn)]}
-  (swap! (:atom conn) update :listeners dissoc key))
+  (swap! (.-atom conn) update :listeners dissoc key))

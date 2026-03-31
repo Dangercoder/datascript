@@ -292,7 +292,6 @@
         (let [idx (int idx)]
           (fn contained-int-getter-fn [tuple]
             (let [eid #?(:cljs (da/aget tuple idx)
-               :cljr (get tuple idx)
                          :cljr (get tuple idx)
                          :clj (if (.isArray (.getClass ^Object tuple))
                                 (aget ^objects tuple idx)
@@ -348,6 +347,15 @@
                          (aset arr i ((aget getters-arr i) tuple))
                          (recur (unchecked-inc i)))
                        (LazilyPersistentVector/createOwning arr)))))
+               :cljr
+               (fn [tuple]
+                 (let [arr (make-array Object n)]
+                   (loop [i 0]
+                     (if (< i n)
+                       (do
+                         (aset arr i ((aget getters-arr i) tuple))
+                         (recur (unchecked-inc i)))
+                       (vec arr)))))
                :cljs (fn [tuple]
                        (list* (.map getters-arr #(% tuple)))))))))))
 
@@ -535,7 +543,9 @@
 (defn- resolve-sym [sym]
   #?(:cljs nil
      :clj (when (namespace sym)
-            (when-some [v (resolve sym)] @v))))
+            (when-some [v (resolve sym)] @v))
+     :cljr (when (namespace sym)
+             (when-some [v (resolve sym)] (deref v)))))
 
 (defn filter-by-pred [context clause]
   (let [[[f & args]] clause
@@ -888,7 +898,7 @@
                      :cljr
                      (dotimes [i len]
                        (when-some [idx (aget ^objects copy-map i)]
-                         (aset res i (nth t2 idx))))
+                         (aset res i (get t2 idx))))
                      :cljs
                      (dotimes [i len]
                        (when-some [idx (aget ^objects copy-map i)]

@@ -53,6 +53,12 @@
   (and (not (string? x))
     #?(:cljs (or (cljs.core/seqable? x)
                (arrays/array? x))
+       :cljr (or (seq? x)
+               (instance? clojure.lang.Seqable x)
+               (nil? x)
+               (instance? System.Collections.IEnumerable x)
+               (arrays/array? x)
+               (instance? System.Collections.IDictionary x))
        :clj  (or (seq? x)
                (instance? clojure.lang.Seqable x)
                (nil? x)
@@ -590,13 +596,16 @@
 (defn- cmp-attr-quick
   #?(:clj
      {:inline (fn [a1 a2]
-        `(long (.compareTo ~(with-meta a1 {:tag "Comparable"}) ~a2)))})
+        `(long (.compareTo ~(with-meta a1 {:tag "Comparable"}) ~a2)))}
+     :cljr {})
   ^long [a1 a2]
   ;; either both are keywords or both are strings
   #?(:cljs
      (if (keyword? a1)
        (-compare a1 a2)
        (garray/defaultCompare a1 a2))
+     :cljr
+     (.CompareTo ^IComparable a1 a2)
      :clj
      (.compareTo ^Comparable a1 a2)))
 
@@ -772,7 +781,7 @@
        clojure.lang.IPersistentCollection
        (count [db]         (count eavt))
        (equiv [db other]   (equiv-db db other))
-       clojure.lang.IEditableCollection 
+       clojure.lang.IEditableCollection
        (empty [db]         (-> (restore-db
                                  {:schema  (.-schema db)
                                   :rschema (.-rschema db)
@@ -783,7 +792,9 @@
        (asTransient [db] (db-transient db))
        clojure.lang.ITransientCollection
        (conj [db key] (throw (ex-info "datascript.DB/conj! is not supported" {})))
-       (persistent [db] (db-persistent! db))])
+       (persistent [db] (db-persistent! db))]
+
+)
 
   IDB
   (-schema [db] (.-schema db))
@@ -920,7 +931,9 @@
        clojure.lang.Associative
        (containsKey [e k]  (throw (#?(:clj UnsupportedOperationException. :cljr NotSupportedException. :cljs js/Error.) "containsKey is not supported on FilteredDB")))
        (entryAt [db k]     (throw (#?(:clj UnsupportedOperationException. :cljr NotSupportedException. :cljs js/Error.) "entryAt is not supported on FilteredDB")))
-       (assoc [db k v]     (throw (#?(:clj UnsupportedOperationException. :cljr NotSupportedException. :cljs js/Error.) "assoc is not supported on FilteredDB")))])
+       (assoc [db k v]     (throw (#?(:clj UnsupportedOperationException. :cljr NotSupportedException. :cljs js/Error.) "assoc is not supported on FilteredDB")))]
+
+)
 
   IDB
   (-schema [db]
