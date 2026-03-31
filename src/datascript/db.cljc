@@ -517,7 +517,7 @@
                   (recur (next xs) (next ys))
                   v)))))))))
 
-(defn+ ^number value-compare [x y]
+(defn+ #?@(:clj [^number value-compare] :cljr [value-compare] :cljs [^number value-compare]) [x y]
   (try
     (cond
       (= x y) 0
@@ -1169,14 +1169,14 @@
       (= (first xs) (first ys)) (recur (next xs) (next ys))
       :else false)))
 
-(defn+ ^:private ^number hash-db [^DB db]
+(defn+ ^:private #?@(:clj [^number hash-db] :cljr [hash-db] :cljs [^number hash-db]) [^DB db]
   (let [h @(.-hash db)]
     (if (zero? h)
       (reset! (.-hash db) (combine-hashes (hash (.-schema db))
                             (hash (.-eavt db))))
       h)))
 
-(defn+ ^:private ^number hash-fdb [^FilteredDB db]
+(defn+ ^:private #?@(:clj [^number hash-fdb] :cljr [hash-fdb] :cljs [^number hash-fdb]) [^FilteredDB db]
   (let [h @(.-hash db)
         datoms (or (-datoms db :eavt nil nil nil nil) #{})]
     (if (zero? h)
@@ -1185,7 +1185,7 @@
                               (hash-unordered-coll datoms))))
       h)))
 
-(defn+ ^:private ^boolean equiv-db [db other]
+(defn+ ^:private #?@(:clj [^boolean equiv-db] :cljr [equiv-db] :cljs [^boolean equiv-db]) [db other]
   (and (or (instance? DB other) (instance? FilteredDB other))
     (= (-schema db) (-schema other))
     (equiv-db-index (-datoms db :eavt nil nil nil nil) (-datoms other :eavt nil nil nil nil))))
@@ -1260,35 +1260,35 @@
 
 (defrecord TxReport [db-before db-after tx-data tempids tx-meta])
 
-(defn+ ^boolean is-attr? [db attr property]
+(defn+ #?@(:clj [^boolean is-attr?] :cljr [is-attr?] :cljs [^boolean is-attr?]) [db attr property]
   (contains? (-attrs-by db property) attr))
 
-(defn+ ^boolean multival? [db attr]
+(defn+ #?@(:clj [^boolean multival?] :cljr [multival?] :cljs [^boolean multival?]) [db attr]
   (is-attr? db attr :db.cardinality/many))
 
-(defn+ ^boolean multi-value? [db attr value]
+(defn+ #?@(:clj [^boolean multi-value?] :cljr [multi-value?] :cljs [^boolean multi-value?]) [db attr value]
   (and
     (is-attr? db attr :db.cardinality/many)
     (or
       (arrays/array? value)
       (and (coll? value) (not (map? value))))))
 
-(defn+ ^boolean ref? [db attr]
+(defn+ #?@(:clj [^boolean ref?] :cljr [ref?] :cljs [^boolean ref?]) [db attr]
   (is-attr? db attr :db.type/ref))
 
-(defn+ ^boolean component? [db attr]
+(defn+ #?@(:clj [^boolean component?] :cljr [component?] :cljs [^boolean component?]) [db attr]
   (is-attr? db attr :db/isComponent))
 
-(defn+ ^boolean indexing? [db attr]
+(defn+ #?@(:clj [^boolean indexing?] :cljr [indexing?] :cljs [^boolean indexing?]) [db attr]
   (is-attr? db attr :db/index))
 
-(defn+ ^boolean tuple? [db attr]
+(defn+ #?@(:clj [^boolean tuple?] :cljr [tuple?] :cljs [^boolean tuple?]) [db attr]
   (is-attr? db attr :db.type/tuple))
 
-(defn+ ^boolean tuple-source? [db attr]
+(defn+ #?@(:clj [^boolean tuple-source?] :cljr [tuple-source?] :cljs [^boolean tuple-source?]) [db attr]
   (is-attr? db attr :db/attrTuples))
 
-(defn+ ^boolean reverse-ref? [attr]
+(defn+ #?@(:clj [^boolean reverse-ref?] :cljr [reverse-ref?] :cljs [^boolean reverse-ref?]) [attr]
   (cond
     (keyword? attr)
     (= \_ (nth (name attr) 0))
@@ -1325,7 +1325,7 @@
         v))
     (-> db -schema (get a) :db/tupleAttrs) vs))
 
-(defn+ ^number entid [db eid]
+(defn+ #?@(:clj [^number entid] :cljr [entid] :cljs [^number entid]) [db eid]
   {:pre [(db? db)]}
   (cond
     (and (number? eid) (pos? eid))
@@ -1363,17 +1363,17 @@
     (util/raise "Expected number or lookup ref for entity id, got " eid
       {:error :entity-id/syntax, :entity-id eid})))
 
-(defn+ ^boolean numeric-eid-exists? [db eid]
+(defn+ #?@(:clj [^boolean numeric-eid-exists?] :cljr [numeric-eid-exists?] :cljs [^boolean numeric-eid-exists?]) [db eid]
   (= eid (-> (-seek-datoms db :eavt eid nil nil nil) first :e)))
 
-(defn+ ^number entid-strict [db eid]
+(defn+ #?@(:clj [^number entid-strict] :cljr [entid-strict] :cljs [^number entid-strict]) [db eid]
   (or
     (entid db eid)
     (util/raise "Nothing found for entity id " eid
       {:error :entity-id/missing
        :entity-id eid})))
 
-(defn+ ^number entid-some [db eid]
+(defn+ #?@(:clj [^number entid-some] :cljr [entid-some] :cljs [^number entid-some]) [db eid]
   (when (some? eid)
     (entid-strict db eid)))
 
@@ -1401,7 +1401,7 @@
 (defn auto-tempid []
   (AutoTempid. (swap! *last-auto-tempid inc)))
 
-(defn+ ^boolean auto-tempid? [x]
+(defn+ #?@(:clj [^boolean auto-tempid?] :cljr [auto-tempid?] :cljs [^boolean auto-tempid?]) [x]
   (instance? AutoTempid x))
 
 (defn assoc-auto-tempids [db tx-data]
